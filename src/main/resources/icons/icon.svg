@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="120" height="120" viewBox="0 0 120 120" role="img" aria-label="Terminal with ghost icon">
+  <title>Terminal icon with ghost and prompt line</title>
+  <!-- Terminal rounded rectangle -->
+  <rect x="8" y="8" width="104" height="104" rx="10" ry="10" fill="#0f1720" stroke="#39424a" stroke-width="2"/>
+  <!-- Ghost graphic group (imported) -->
+  <g id="ghost" transform="translate(23,38) scale(0.08)" fill="#ffffff" stroke="none" opacity="0.6">
+    <path xmlns="http://www.w3.org/2000/svg" d="M186.1 .1032c-105.1 3.126-186.1 94.75-186.1 199.9v264c0 14.25 17.3 21.38 27.3 11.25l24.95-18.5c6.625-5.001 16-4.001 21.5 2.25l43 48.31c6.25 6.251 16.37 6.251 22.62 0l40.62-45.81c6.375-7.251 17.62-7.251 24 0l40.63 45.81c6.25 6.251 16.38 6.251 22.62 0l43-48.31c5.5-6.251 14.88-7.251 21.5-2.25l24.95 18.5c10 10.13 27.3 3.002 27.3-11.25V192C384 83.98 294.9-3.147 186.1 .1032zM128 224c-17.62 0-31.1-14.38-31.1-32.01s14.38-32.01 31.1-32.01s32 14.38 32 32.01S145.6 224 128 224zM256 224c-17.62 0-32-14.38-32-32.01s14.38-32.01 32-32.01c17.62 0 32 14.38 32 32.01S273.6 224 256 224z"/>
+  </g>
+  <!-- Prompt cursor line -->
+  <rect x="75" y="85" width="25" height="6" rx="3" fill="white" opacity="0.6"/>
+</svg>
