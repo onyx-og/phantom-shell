@@ -60,10 +60,10 @@ jobs:
       - uses: actions/checkout@v4
 
       # --- Set up GraalVM for Windows ---
-      - name: Set up GraalVM for Java 17 (Windows)
+      - name: Set up GraalVM for Java 21 (Windows)
         uses: graalvm/setup-graalvm@v1
         with:
-          java-version: '17'
+          java-version: '21'
           distribution: 'graalvm-community'
           components: 'native-image'
           cache: maven
@@ -84,7 +84,7 @@ jobs:
           $env:MAVEN_OPTS = "-Xmx2G"
           $env:GRAALVM_OPTS = "--no-fallback -J-Xmx5G"
       
-          & mvn '-Pnative' '-DskipTests' '-e' '-X' '-DspringAot.excludeAotTestGeneration=true' 'clean' 'native:compile'
+          & mvn '-Pnative' '-DskipTests' '-e' '-X' '-DspringAot.excludeAotTestGeneration=true' '-Dspring.native.enable-native-access=ALL-UNNAMED' 'clean' 'native:compile'
 
       # --- Upload the generated Windows binary ---
       - name: Upload Windows native binary
