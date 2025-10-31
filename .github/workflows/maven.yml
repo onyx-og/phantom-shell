@@ -81,9 +81,10 @@ jobs:
         shell: pwsh
         run: |
           # Increase memory limits to avoid OOM
-          $env:MAVEN_OPTS="-Xmx2G"
-          $env:GRAALVM_OPTS="--no-fallback -J-Xmx5G"
-          mvn -Pnative -DskipTests -e -X -DspringAot.excludeAotTestGeneration=true clean native:compile
+          $env:MAVEN_OPTS = "-Xmx2G"
+          $env:GRAALVM_OPTS = "--no-fallback -J-Xmx5G"
+      
+          & mvn '-Pnative' '-DskipTests' '-e' '-X' '-DspringAot.excludeAotTestGeneration=true' 'clean' 'native:compile'
 
       # --- Upload the generated Windows binary ---
       - name: Upload Windows native binary
