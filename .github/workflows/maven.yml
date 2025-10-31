@@ -31,8 +31,12 @@ jobs:
           native-image --version
 
       # --- Build native executable ---
-      - name: Build native image with Maven
-        run: mvn -Pnative -DskipTests clean native:compile
+      - name: Build native image
+        run: |
+          export MAVEN_OPTS="-Xmx2G"
+          export GRAALVM_OPTS="--no-fallback -J-Xmx5G"
+          mvn -Pnative -DskipTests -DspringAot.excludeAotTestGeneration=true clean native:compile
+
 
       # --- Save the built native binary as an artifact ---
       - name: Upload native binary
