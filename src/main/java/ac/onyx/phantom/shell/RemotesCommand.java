@@ -2,16 +2,21 @@ package ac.onyx.phantom.shell;
 
 import java.io.File;
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.shell.component.PathInput;
+import org.springframework.shell.component.PathInput.PathInputContext;
 import org.springframework.shell.component.SingleItemSelector;
 import org.springframework.shell.component.SingleItemSelector.SingleItemSelectorContext;
 import org.springframework.shell.component.support.SelectorItem;
 import org.springframework.shell.standard.AbstractShellComponent;
 import org.springframework.shell.standard.ShellComponent;
 import org.springframework.shell.standard.ShellMethod;
+import org.springframework.shell.standard.ShellOption;
 
 import ac.onyx.phantom.shell.ssh.SSHConfigParser;
 import ac.onyx.phantom.shell.ssh.SSHConfig;
@@ -20,8 +25,44 @@ import ac.onyx.phantom.shell.ssh.SSHConfig;
 public class RemotesCommand extends AbstractShellComponent {
 
     @ShellMethod(key = {"remotes", "--remotes"}, value = "List and select remote servers")
-    public String remotes() throws IOException, InterruptedException {
-        List<SSHConfig> hosts = SSHConfigParser.parse(new File(System.getProperty("user.home"), ".ssh/config"));
+    public String remotes(
+        @ShellOption(defaultValue = ShellOption.NULL, help = "Path to SSH config file") String configPath
+    ) throws IOException, InterruptedException {
+
+        // Use provided path, or fallback to default ~/.ssh/config
+        File configFile;
+        if (configPath != null && !configPath.isBlank()) {
+            configFile = new File(configPath);
+        } else {
+            configFile = new File(System.getProperty("user.home"), ".ssh/config");
+        }
+
+        if (!configFile.exists() || !configFile.isFile()) {
+            getTerminal().writer().println("⚠️  SSH config not found at: " + configFile.getAbsolutePath());
+            getTerminal().writer().println("Please enter a valid SSH config path:");
+
+            // Use Spring Shell PathInput for interactive selection
+            PathInput component = new PathInput(getTerminal(), "SSH config file path");
+            component.setResourceLoader(getResourceLoader());
+            component.setTemplateExecutor(getTemplateExecutor());
+
+            PathInputContext context = component.run(PathInputContext.empty());
+            Path inputPath = context.getResultValue();
+
+            if (inputPath == null || inputPath.toString().isBlank()) {
+                return "❌ No valid path entered. Aborting.";
+            }
+
+            configFile = new File(inputPath.toString().replaceFirst("^~", System.getProperty("user.home")));
+
+            if (!configFile.exists()) {
+                return "❌ File not found: " + inputPath;
+            }
+
+        }
+
+            // --- Continue with your existing parsing & host selection ---
+        List<SSHConfig> hosts = SSHConfigParser.parse(configFile);
 
         // Filter entries without a hostname
         List<SSHConfig> validHosts = hosts.stream()
@@ -32,33 +73,21 @@ public class RemotesCommand extends AbstractShellComponent {
             return "No valid SSH hosts found in ~/.ssh/config";
         }
 
-        // List<SelectorItem<SSHConfig>> items = validHosts.stream()
-        //     .filter(h -> h.getHostname() != null && !h.getHostname().isBlank())
-        //     .map(h -> SelectorItem.of(
-        //             String.join(",", h.getPatterns()),
-        //             (
-        //                 ( h.getUser() == null || h.getUser().isBlank() )
-        //                 ? System.getProperty("user.name")
-        //                 : h.getUser()
-        //             ) + "@" + h.getHostname() + ":" + h.getPort()
-        //     ))
-        //     .collect(Collectors.toList());
-        
         List<SelectorItem<SSHConfig>> items = validHosts.stream()
             .filter(h -> h.getHostname() != null && !h.getHostname().isBlank())
             .map(h -> SelectorItem.of(
-                    String.join(",", h.getPatterns()),
-                    h
+                String.join(",", h.getPatterns()),
+                h
             ))
             .collect(Collectors.toList());
 
-        SingleItemSelector<SSHConfig, SelectorItem<SSHConfig>> component = new SingleItemSelector<>(getTerminal(),
+        SingleItemSelector<SSHConfig, SelectorItem<SSHConfig>> remoteSelector = new SingleItemSelector<>(getTerminal(),
             items, "Select a remote", null);
 
-		component.setResourceLoader(getResourceLoader());
-		component.setTemplateExecutor(getTemplateExecutor());
+		remoteSelector.setResourceLoader(getResourceLoader());
+		remoteSelector.setTemplateExecutor(getTemplateExecutor());
 
-		SingleItemSelectorContext<SSHConfig, SelectorItem<SSHConfig>> context = component
+		SingleItemSelectorContext<SSHConfig, SelectorItem<SSHConfig>> context = remoteSelector
             .run(SingleItemSelectorContext.empty());
 
 		SSHConfig selectedHost = context.getResultItem()
@@ -68,8 +97,8 @@ public class RemotesCommand extends AbstractShellComponent {
         if (selectedHost == null) return "No host selected";
 
         String user = (selectedHost.getUser() == null || selectedHost.getUser().isBlank())
-                ? System.getProperty("user.name")
-                : selectedHost.getUser();
+            ? System.getProperty("user.name")
+            : selectedHost.getUser();
 
         // --- 3. Shell selection ---
         List<String> availableShells = new ArrayList<>();
@@ -83,20 +112,20 @@ public class RemotesCommand extends AbstractShellComponent {
         }
 
         List<SelectorItem<String>> shellItems = availableShells.stream()
-                .map(s -> SelectorItem.of(s, s))
-                .collect(Collectors.toList());
+            .map(s -> SelectorItem.of(s, s))
+            .collect(Collectors.toList());
 
         SingleItemSelector<String, SelectorItem<String>> shellSelector =
-                new SingleItemSelector<>(getTerminal(), shellItems, "Select shell", null);
+            new SingleItemSelector<>(getTerminal(), shellItems, "Select shell", null);
         shellSelector.setResourceLoader(getResourceLoader());
         shellSelector.setTemplateExecutor(getTemplateExecutor());
 
         SingleItemSelectorContext<String, SelectorItem<String>> shellContext =
-                shellSelector.run(SingleItemSelectorContext.empty());
+            shellSelector.run(SingleItemSelectorContext.empty());
 
         String selectedShell = shellContext.getResultItem()
-                .map(SelectorItem::getItem)
-                .orElse("Integrated");
+            .map(SelectorItem::getItem)
+            .orElse("Integrated");
 
         // --- 4. Launch the chosen shell ---
         if ("Integrated".equals(selectedShell)) {
