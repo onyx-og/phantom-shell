@@ -35,7 +35,7 @@ jobs:
         run: |
           export MAVEN_OPTS="-Xmx2G"
           export GRAALVM_OPTS="--no-fallback -J-Xmx5G"
-          mvn -Pnative -DskipTests -DspringAot.excludeAotTestGeneration=true clean native:compile
+          mvn -Pnative -DskipTests -e -X -DspringAot.excludeAotTestGeneration=true clean native:compile
 
 
       # --- Save the built native binary as an artifact ---
