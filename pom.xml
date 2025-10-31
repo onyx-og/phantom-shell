@@ -27,6 +27,22 @@
         <rest.assured.version>2.3.3</rest.assured.version>
     </properties>
 
+    <dependencyManagement>
+      <dependencies>
+        <!-- Force JLine to use 3.25.0 instead of 3.26.1 -->
+        <dependency>
+          <groupId>org.jline</groupId>
+          <artifactId>jline-terminal</artifactId>
+          <version>3.25.0</version>
+        </dependency>
+        <dependency>
+          <groupId>org.jline</groupId>
+          <artifactId>jline-native</artifactId>
+          <version>3.25.0</version>
+        </dependency>
+      </dependencies>
+    </dependencyManagement>
+
     <dependencies>
         <dependency>
             <groupId>org.springframework.boot</groupId>
