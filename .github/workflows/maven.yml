@@ -1,4 +1,4 @@
-name: Build Native Spring Boot App
+name: Build Native
 
 on:
   push:
