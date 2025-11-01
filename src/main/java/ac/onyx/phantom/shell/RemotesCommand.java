@@ -61,7 +61,7 @@ public class RemotesCommand extends AbstractShellComponent {
 
         }
 
-            // --- Continue with your existing parsing & host selection ---
+        // Continue with parsing & host selection
         List<SSHConfig> hosts = SSHConfigParser.parse(configFile);
 
         // Filter entries without a hostname
@@ -135,17 +135,21 @@ public class RemotesCommand extends AbstractShellComponent {
             // External shell
             String command;
             if ("PowerShell".equals(selectedShell)) {
-                command = "powershell.exe"; // or "pwsh" for PowerShell Core
+                // command = "powershell.exe";
+                new ProcessBuilder("cmd.exe", "/c", "start", "powershell.exe", "-NoExit", "-Command", sshCommand)
+                    .inheritIO()
+                    .start();
             } else {
                 command = "bash";
+                
+                String sshCommand = String.format("ssh %s@%s -p %d", user, selectedHost.getHostname(), selectedHost.getPort());
+
+                new ProcessBuilder(command, "-c", sshCommand)
+                    .inheritIO()
+                    .start()
+                    .waitFor();
             }
 
-            String sshCommand = String.format("ssh %s@%s -p %d", user, selectedHost.getHostname(), selectedHost.getPort());
-
-            new ProcessBuilder(command, "-c", sshCommand)
-                .inheritIO()
-                .start()
-                .waitFor();
         }
 
         return "Connection closed";
