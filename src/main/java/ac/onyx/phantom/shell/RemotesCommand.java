@@ -134,6 +134,8 @@ public class RemotesCommand extends AbstractShellComponent {
         } else {
             // External shell
             String command;
+            String sshCommand = String.format("ssh %s@%s -p %d", user, selectedHost.getHostname(), selectedHost.getPort());
+            
             if ("PowerShell".equals(selectedShell)) {
                 // command = "powershell.exe";
                 new ProcessBuilder("cmd.exe", "/c", "start", "powershell.exe", "-NoExit", "-Command", sshCommand)
@@ -141,8 +143,6 @@ public class RemotesCommand extends AbstractShellComponent {
                     .start();
             } else {
                 command = "bash";
-                
-                String sshCommand = String.format("ssh %s@%s -p %d", user, selectedHost.getHostname(), selectedHost.getPort());
 
                 new ProcessBuilder(command, "-c", sshCommand)
                     .inheritIO()
