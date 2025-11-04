@@ -160,6 +160,7 @@
                         <configuration>
                             <buildArgs>
                                 <buildArg>-H:DynamicProxyConfigurationResources=META-INF/native-image/phantom-shell/proxy-config.json</buildArg>
+                                <buildArg>-H:ReflectionConfigurationResources=META-INF/native-image/phantom-shell/reflect-config.json</buildArg>
                             </buildArgs>
                         </configuration>
                     </plugin>
