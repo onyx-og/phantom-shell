@@ -1,0 +1,60 @@
+name: Integration Test - phantom-agent
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+  workflow_dispatch:
+
+jobs:
+  integration-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: 1. Checkout Phantom Shell
+      uses: actions/checkout@v4
+      # This checks out the primary repository (phantom-shell) into the root of the workspace.
+  
+    - name: 2. Checkout Phantom Agent
+      uses: actions/checkout@v4
+      with:
+        repository: 'onyx-og/phantom-agent'
+        path: 'phantom-agent'
+        # Personal Access Token (PAT) with scope that enable read on phantom-agent
+        # The default GITHUB_TOKEN often lacks permission to clone other private repos.
+        token: ${{ secrets.PAT_FOR_AGENT_REPO }}
+  
+    - name: 3. Setup Environments (Java & Python)
+      uses: actions/setup-java@v4
+      with:
+        distribution: 'temurin'
+        java-version: '17'
+    - uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+        
+    - name: 4. Install Phantom Agent Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        # Navigate into the checked-out agent dir and install requirements
+        pip install -r ./phantom-agent/requirements.txt
+        
+    - name: 5. Start Phantom Agent in the Background
+      run: |
+        echo "Starting Python Agent..."
+        # Start phantom-agent. The '&' runs it as a background process.
+        python ./phantom-agent/src/phantom_agent.py &
+        
+        # Give the agent a moment
+        sleep 5
+        
+        # Check if the process is running (debug)
+        AGENT_PID=$(pgrep -f "phantom_agent.py")
+        if [ -z "$AGENT_PID" ]; then
+          echo "::error::Phantom Agent failed to start."
+          cat agent.log
+          exit 1
+        else
+          echo "Phantom Agent started with PID $AGENT_PID"
+        fi
