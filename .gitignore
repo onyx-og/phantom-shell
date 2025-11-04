@@ -25,3 +25,6 @@ components/camel-cxf/activemq-data
 *.swp
 .flattened-pom.xml
 .java-version
+
+# Rotated logs
+*.gz

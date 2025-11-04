@@ -8,25 +8,26 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.stream.Collectors;
 
+import org.springframework.shell.command.annotation.Command;
+import org.springframework.shell.command.annotation.Option;
 import org.springframework.shell.component.PathInput;
 import org.springframework.shell.component.PathInput.PathInputContext;
 import org.springframework.shell.component.SingleItemSelector;
 import org.springframework.shell.component.SingleItemSelector.SingleItemSelectorContext;
 import org.springframework.shell.component.support.SelectorItem;
 import org.springframework.shell.standard.AbstractShellComponent;
-import org.springframework.shell.standard.ShellComponent;
-import org.springframework.shell.standard.ShellMethod;
-import org.springframework.shell.standard.ShellOption;
 
 import ac.onyx.phantom.shell.ssh.SSHConfigParser;
 import ac.onyx.phantom.shell.ssh.SSHConfig;
 
-@ShellComponent
+@Command(group = "Remotes")
 public class RemotesCommand extends AbstractShellComponent {
 
-    @ShellMethod(key = {"remotes", "--remotes"}, value = "List and select remote servers")
+    @Command(command = "remotes", alias = "--remotes",
+          description = "List and select remote servers")
     public String remotes(
-        @ShellOption(defaultValue = ShellOption.NULL, help = "Path to SSH config file") String configPath
+        @Option(longNames = "config", shortNames = 'c', required = false, description = "Path to SSH config file")
+        String configPath
     ) throws IOException, InterruptedException {
 
         // Use provided path, or fallback to default ~/.ssh/config
