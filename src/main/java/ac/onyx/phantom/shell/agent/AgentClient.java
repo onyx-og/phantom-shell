@@ -128,7 +128,7 @@ public class AgentClient {
             Kernel32.INSTANCE.ReadFile(pipe, respBytes, respLen, read, null);
 
             // String respJson = new String(respBytes, StandardCharsets.UTF_8);
-            return mapper.readValue(respBytes, Map.class)
+            return mapper.readValue(respBytes, Map.class);
         } finally {
             Kernel32.INSTANCE.CloseHandle(pipe);
         }
