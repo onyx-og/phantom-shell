@@ -109,26 +109,41 @@ public class AgentClient {
         req.put("request_id", UUID.randomUUID().toString());
 
         byte[] reqBytes = mapper.writeValueAsBytes(req);
-        byte[] lenPrefix = ByteBuffer.allocate(4).putInt(reqBytes.length).array();
 
-        // Open the pipe for read/write
+        // Open the named pipe for read/write
         WinNT.HANDLE pipe = openPipe(PIPE_NAME);
+        IntByReference written = new IntByReference();
+        IntByReference read = new IntByReference();
+
         try {
-            IntByReference written = new IntByReference();
-            Kernel32.INSTANCE.WriteFile(pipe, lenPrefix, 4, written, null);
-            Kernel32.INSTANCE.WriteFile(pipe, reqBytes, reqBytes.length, written, null);
+            // Write the JSON request (no length prefix for Windows)
+            boolean ok = Kernel32.INSTANCE.WriteFile(pipe, reqBytes, reqBytes.length, written, null);
+            if (!ok) {
+                int err = Kernel32.INSTANCE.GetLastError();
+                throw new IOException("WriteFile failed, error code: " + err);
+            }
 
-            // Read response length (first 4 bytes)
-            byte[] respLenBytes = new byte[4];
-            IntByReference read = new IntByReference();
-            Kernel32.INSTANCE.ReadFile(pipe, respLenBytes, 4, read, null);
-            int respLen = ByteBuffer.wrap(respLenBytes).getInt();
+            // Read the full response (until EOF or no bytes read)
+            ByteArrayOutputStream baos = new ByteArrayOutputStream();
+            byte[] buf = new byte[4096];
 
-            byte[] respBytes = new byte[respLen];
-            Kernel32.INSTANCE.ReadFile(pipe, respBytes, respLen, read, null);
+            while (true) {
+                boolean readOk = Kernel32.INSTANCE.ReadFile(pipe, buf, buf.length, read, null);
+                int bytesRead = read.getValue();
 
-            // String respJson = new String(respBytes, StandardCharsets.UTF_8);
+                if (!readOk || bytesRead <= 0) {
+                    break; // EOF or error
+                }
+                baos.write(buf, 0, bytesRead);
+            }
+
+            byte[] respBytes = baos.toByteArray();
+            if (respBytes.length == 0) {
+                throw new IOException("Empty response from Phantom Agent");
+            }
+
             return mapper.readValue(respBytes, Map.class);
+
         } finally {
             Kernel32.INSTANCE.CloseHandle(pipe);
         }
