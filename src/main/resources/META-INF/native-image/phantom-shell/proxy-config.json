@@ -1,0 +1,5 @@
+[
+  ["com.sun.jna.platform.win32.Kernel32"],
+  ["com.sun.jna.platform.win32.WinNT"],
+  ["com.sun.jna.platform.win32.WinBase"]
+]
