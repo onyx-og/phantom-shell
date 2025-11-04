@@ -12,7 +12,7 @@ import java.util.*;
 public class AgentCommands extends AbstractShellComponent {
 
     private final AgentClient client =
-        new AgentClient("/tmp/phantom_agent.sock", "devtoken123");
+        new AgentClient("devtoken123");
 
     @Command(command = "agent", alias = "--agent",
         description = "Run command on phantom-agent")
