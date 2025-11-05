@@ -2,22 +2,36 @@ package ac.onyx.phantom.shell;
 
 import java.io.File;
 import java.io.IOException;
-import java.nio.file.Files;
+import java.io.InputStream;
+import java.io.OutputStream;
+import java.io.Reader;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
 import java.util.stream.Collectors;
 
+import org.jline.terminal.Attributes;
+import org.jline.terminal.Terminal;
+import org.jline.utils.AttributedString;
+import org.jline.utils.AttributedStyle;
 import org.springframework.shell.command.annotation.Command;
 import org.springframework.shell.command.annotation.Option;
 import org.springframework.shell.component.PathInput;
 import org.springframework.shell.component.PathInput.PathInputContext;
 import org.springframework.shell.component.SingleItemSelector;
+import org.springframework.shell.component.StringInput;
 import org.springframework.shell.component.SingleItemSelector.SingleItemSelectorContext;
+import org.springframework.shell.component.StringInput.StringInputContext;
 import org.springframework.shell.component.support.SelectorItem;
 import org.springframework.shell.standard.AbstractShellComponent;
 
 import ac.onyx.phantom.shell.ssh.SSHConfigParser;
+import net.schmizz.sshj.SSHClient;
+import net.schmizz.sshj.connection.channel.direct.Session;
+import net.schmizz.sshj.transport.verification.PromiscuousVerifier;
 import ac.onyx.phantom.shell.ssh.SSHConfig;
 
 @Command(group = "Remotes")
@@ -103,7 +117,7 @@ public class RemotesCommand extends AbstractShellComponent {
 
         // --- 3. Shell selection ---
         List<String> availableShells = new ArrayList<>();
-        // availableShells.add("Integrated");
+        availableShells.add("Integrated");
 
         String os = System.getProperty("os.name").toLowerCase();
         if (os.contains("win")) {
@@ -130,10 +144,111 @@ public class RemotesCommand extends AbstractShellComponent {
 
         // --- 4. Launch the chosen shell ---
         if ("Integrated".equals(selectedShell)) {
-            // Integrated SSHJ shell
+            Terminal terminal = getTerminal();
+
+            // --- 2. Ask for password using Spring Shell StringInput ---
+            StringInput passwordInput = new StringInput(getTerminal(), "Password for " + user + ":", "");
+            passwordInput.setResourceLoader(getResourceLoader());
+            passwordInput.setTemplateExecutor(getTemplateExecutor());
+            passwordInput.setMaskCharacter('*');  // Mask input
+
+            StringInputContext passwordCtx = passwordInput.run(StringInputContext.empty());
+            String password = passwordCtx.getResultValue();
+
+            // Optional: If the user presses Enter without typing anything,
+            // you can handle that as "no password" (maybe try key-based auth)
+            if (password == null || password.isBlank()) {
+                password = "";
+                getTerminal().writer().println("⚠️  No password entered, attempting key-based authentication...");
+            }
             
+            Attributes original = terminal.enterRawMode();
+            try ( SSHClient client = new SSHClient()) {
+                client.addHostKeyVerifier(new PromiscuousVerifier());
+                client.connect(selectedHost.getHostname(), selectedHost.getPort());
+
+                try {
+                    if (password.isEmpty()) {
+                        // Try key-based authentication first
+                        try {
+                            client.authPublickey(user);
+                        } catch (Exception e) {
+                            getTerminal().writer().println("⚠️  Key-based authentication failed, retrying with password...");
+                            client.authPassword(user, password);
+                        }
+                    } else {
+                        client.authPassword(user, password);
+                    }
+                } catch (Exception authEx) {
+                    AttributedString serr = new AttributedString("Authentication failed: " + authEx.getMessage(),
+                        AttributedStyle.DEFAULT.foreground(AttributedStyle.RED));
+                    return serr.toAnsi();
+                }
+                
+                // We need two threads: one for input, one for output.
+                // Use a try-with-resources to ensure the executor is shut down.
+                try {
+                    ExecutorService executor = Executors.newFixedThreadPool(2);
+                    // Start the SSH session and shell
+                    try (Session session = client.startSession()) {
+                        session.allocateDefaultPTY();
+                        try (Session.Shell shell = session.startShell()) {
+                            // --- 1. Remote Output -> Local Terminal Thread ---
+                            executor.submit(() -> {
+                                try (InputStream remoteOut = shell.getInputStream()) {
+                                    byte[] buffer = new byte[1024];
+                                    int bytesRead;
+                                    // Loop until the remote stream closes
+                                    while (shell.isOpen() && (bytesRead = remoteOut.read(buffer)) != -1) {
+                                        terminal.output().write(buffer, 0, bytesRead);
+                                        terminal.output().flush(); // CRITICAL: Flush to see output immediately
+                                    }
+                                } catch (IOException e) {
+                                    // This often happens when the shell closes, which is normal
+                                }
+                            });
+
+                            // --- 2. Local Input -> Remote Input Thread ---
+                            executor.submit(() -> {
+                                try (OutputStream remoteIn = shell.getOutputStream()) {
+                                    Reader localReader = terminal.reader();
+                                    int c;
+                                    // Loop until the local reader closes (or we're interrupted)
+                                    while (shell.isOpen() && (c = localReader.read()) != -1) {
+                                        remoteIn.write(c);
+                                        remoteIn.flush(); // CRITICAL: Flush to send input immediately
+                                    }
+                                } catch (IOException e) {
+                                    // This often happens when the shell closes
+                                }
+                            });
+
+                            // --- 3. Main Thread: Wait for completion ---
+                            // Wait for the shell to close (e.g., user types 'exit')
+                            session.join(0, TimeUnit.SECONDS); // 0 means wait indefinitely
+                            terminal.writer().println("\nSSH session closed.");
+
+                        } // shell.close() is called here
+                    } // session.close() is called here
+
+                } catch (org.jline.reader.UserInterruptException e) {
+                    // User pressed Ctrl+C
+                    terminal.writer().println("\n--- Session Interrupted (Ctrl+C) ---");
+                } catch (Exception e) {
+                    terminal.writer().println("An error occurred: " + e.getMessage());
+                } finally {
+                    terminal.writer().flush();
+                }
+            } catch (Exception e) {
+                AttributedString serr = new AttributedString("Failed: " + e.getMessage(),
+                    AttributedStyle.DEFAULT.foreground(AttributedStyle.RED)
+                );
+                return serr.toAnsi();
+            } finally {
+                terminal.setAttributes(original);
+            }
         } else {
-            // External shell
+            // External shell link
             String command;
             String sshCommand = String.format("ssh %s@%s -p %d", user, selectedHost.getHostname(), selectedHost.getPort());
             

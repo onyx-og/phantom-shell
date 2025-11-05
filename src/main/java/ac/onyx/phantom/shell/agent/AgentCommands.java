@@ -45,7 +45,10 @@ public class AgentCommands extends AbstractShellComponent {
             
             return sb.toString().stripTrailing();
         } catch (Exception e) {
-            return "⚠️ Failed: " + e.getMessage();
+            AttributedString serr = new AttributedString("⚠️ Failed: " + e.getMessage(),
+                AttributedStyle.DEFAULT.foreground(AttributedStyle.RED)
+            );
+            return serr.toAnsi();
         }
     }
 }
