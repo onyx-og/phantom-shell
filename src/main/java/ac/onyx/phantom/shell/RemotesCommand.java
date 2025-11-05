@@ -16,6 +16,7 @@ import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import org.jline.terminal.Attributes;
+import org.jline.terminal.Size;
 import org.jline.terminal.Terminal;
 import org.jline.terminal.Terminal.Signal;
 import org.jline.terminal.Terminal.SignalHandler;
@@ -222,7 +223,7 @@ public class RemotesCommand extends AbstractShellComponent {
                 // Save previous handlers so we can restore it later (may be null)
                 SignalHandler prevIntHandler = terminal.handle(Signal.INT, intHandler);
                 SignalHandler prevTstpHandler = terminal.handle(Signal.TSTP, tstpHandler);
-                
+                SignalHandler prevWinh = null;
                 // We need two threads: one for input, one for output.
                 // Use a try-with-resources to ensure the executor is shut down.
                 try {
@@ -233,6 +234,17 @@ public class RemotesCommand extends AbstractShellComponent {
                         session.allocatePTY(termType, terminal.getWidth(), terminal.getHeight(), 0, 0, Collections.emptyMap());
                         // session.allocateDefaultPTY();
                         try (Session.Shell shell = session.startShell()) {
+
+                            prevWinh = terminal.handle(Signal.WINCH, sig -> {
+                                Size sz = terminal.getSize();
+                                try {
+                                    // cols, rows, pixelWidth=0, pixelHeight=0
+                                    shell.changeWindowDimensions(sz.getColumns(), sz.getRows(), 0, 0);
+                                } catch (IOException e) {
+                                    // ignore or log
+                                }
+                            });
+
                             // --- 1. Remote Output -> Local Terminal Thread ---
                             executor.submit(() -> {
                                 try (InputStream remoteOut = shell.getInputStream()) {
@@ -284,6 +296,9 @@ public class RemotesCommand extends AbstractShellComponent {
                     terminal.writer().flush();
                     terminal.handle(Signal.INT, prevIntHandler);
                     terminal.handle(Signal.TSTP, prevTstpHandler);
+                    if (prevWinh != null) {
+                        terminal.handle(Signal.WINCH, prevWinh);
+                    }
                 }
             } catch (Exception e) {
                 AttributedString serr = new AttributedString("Failed: " + e.getMessage(),
