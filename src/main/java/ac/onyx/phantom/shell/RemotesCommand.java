@@ -7,14 +7,18 @@ import java.io.OutputStream;
 import java.io.Reader;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
 import org.jline.terminal.Attributes;
 import org.jline.terminal.Terminal;
+import org.jline.terminal.Terminal.Signal;
+import org.jline.terminal.Terminal.SignalHandler;
 import org.jline.utils.AttributedString;
 import org.jline.utils.AttributedStyle;
 import org.springframework.shell.command.annotation.Command;
@@ -184,6 +188,40 @@ public class RemotesCommand extends AbstractShellComponent {
                         AttributedStyle.DEFAULT.foreground(AttributedStyle.RED));
                     return serr.toAnsi();
                 }
+
+                AtomicReference<OutputStream> remoteInRef = new AtomicReference<>();
+
+                // Create a handler that forwards Ctrl+C to remote stdin
+                SignalHandler intHandler = sig -> {
+                    OutputStream out = remoteInRef.get();
+                    if (out != null) {
+                        try {
+                            out.write(3);           // ASCII ETX (Ctrl+C)
+                            out.flush();
+                        } catch (IOException ioe) {
+                            // best-effort; ignore if remote closed
+                        }
+                    } else {
+                        // No remote yet — swallow the signal (do nothing) so local shell not interrupted
+                    }
+                };
+
+                // --- Ctrl+Z handler (SIGTSTP, ASCII 26) ---
+                SignalHandler tstpHandler = sig -> {
+                    OutputStream out = remoteInRef.get();
+                    if (out != null) {
+                        try {
+                            out.write(26);  // ASCII SUB (Ctrl+Z)
+                            out.flush();
+                        } catch (IOException ioe) {
+                            // Ignore, remote likely closed
+                        }
+                    }
+                };
+
+                // Save previous handlers so we can restore it later (may be null)
+                SignalHandler prevIntHandler = terminal.handle(Signal.INT, intHandler);
+                SignalHandler prevTstpHandler = terminal.handle(Signal.TSTP, tstpHandler);
                 
                 // We need two threads: one for input, one for output.
                 // Use a try-with-resources to ensure the executor is shut down.
@@ -191,7 +229,9 @@ public class RemotesCommand extends AbstractShellComponent {
                     ExecutorService executor = Executors.newFixedThreadPool(2);
                     // Start the SSH session and shell
                     try (Session session = client.startSession()) {
-                        session.allocateDefaultPTY();
+                        String termType = System.getenv().getOrDefault("TERM", "xterm-256color");
+                        session.allocatePTY(termType, terminal.getWidth(), terminal.getHeight(), 0, 0, Collections.emptyMap());
+                        // session.allocateDefaultPTY();
                         try (Session.Shell shell = session.startShell()) {
                             // --- 1. Remote Output -> Local Terminal Thread ---
                             executor.submit(() -> {
@@ -211,6 +251,7 @@ public class RemotesCommand extends AbstractShellComponent {
                             // --- 2. Local Input -> Remote Input Thread ---
                             executor.submit(() -> {
                                 try (OutputStream remoteIn = shell.getOutputStream()) {
+                                    remoteInRef.set(remoteIn);
                                     Reader localReader = terminal.reader();
                                     int c;
                                     // Loop until the local reader closes (or we're interrupted)
@@ -220,6 +261,9 @@ public class RemotesCommand extends AbstractShellComponent {
                                     }
                                 } catch (IOException e) {
                                     // This often happens when the shell closes
+                                } finally {
+                                    // clear ref so signal handler does not attempt to write to closed stream
+                                    remoteInRef.set(null);
                                 }
                             });
 
@@ -238,6 +282,8 @@ public class RemotesCommand extends AbstractShellComponent {
                     terminal.writer().println("An error occurred: " + e.getMessage());
                 } finally {
                     terminal.writer().flush();
+                    terminal.handle(Signal.INT, prevIntHandler);
+                    terminal.handle(Signal.TSTP, prevTstpHandler);
                 }
             } catch (Exception e) {
                 AttributedString serr = new AttributedString("Failed: " + e.getMessage(),
