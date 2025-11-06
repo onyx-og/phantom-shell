@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.stream.Collectors;
 
+import org.jline.reader.UserInterruptException;
 import org.jline.terminal.Attributes;
 import org.jline.terminal.Size;
 import org.jline.terminal.Terminal;
@@ -282,12 +283,15 @@ public class RemotesCommand extends AbstractShellComponent {
                             // --- 3. Main Thread: Wait for completion ---
                             // Wait for the shell to close (e.g., user types 'exit')
                             session.join(0, TimeUnit.SECONDS); // 0 means wait indefinitely
-                            terminal.writer().println("\nSSH session closed.");
+                            AttributedString sout = new AttributedString("Integrated SSH session closed.",
+                                AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW)
+                            );
+                            terminal.writer().println(sout.toAnsi());
 
                         } // shell.close() is called here
                     } // session.close() is called here
 
-                } catch (org.jline.reader.UserInterruptException e) {
+                } catch (UserInterruptException e) {
                     // User pressed Ctrl+C
                     terminal.writer().println("\n--- Session Interrupted (Ctrl+C) ---");
                 } catch (Exception e) {
@@ -318,6 +322,10 @@ public class RemotesCommand extends AbstractShellComponent {
                 new ProcessBuilder("cmd.exe", "/c", "start", "powershell.exe", "-NoExit", "-Command", sshCommand)
                     .inheritIO()
                     .start();
+                AttributedString sout = new AttributedString("Opened a detached remote connection.",
+                    AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW)
+                );
+                return sout.toAnsi();
             } else {
                 command = "bash";
 
@@ -329,6 +337,9 @@ public class RemotesCommand extends AbstractShellComponent {
 
         }
 
-        return "Connection closed";
+        AttributedString sout = new AttributedString("Remote connection closed.",
+            AttributedStyle.DEFAULT.foreground(AttributedStyle.YELLOW)
+        );
+        return sout.toAnsi();
     }
 }
